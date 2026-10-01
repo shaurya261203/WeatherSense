@@ -584,10 +584,24 @@ def get_latest_features(city: str):
 
         feature_values[column] = float(value)
 
-    # Current UI weather always comes from the live-current request.
-    live_current = fetch_current_weather(city)
-    current = live_current["current"]
-    timestamp = pd.Timestamp(live_current["current"]["time"])
+    # Use the latest historical row for ML feature generation.
+    # The frontend separately fetches the live current conditions.
+    current = {
+        "temperature_2m": _safe_float(latest_row["temperature_2m"]),
+        "relative_humidity_2m": _safe_float(latest_row["relative_humidity_2m"]),
+        "dew_point_2m": _safe_float(latest_row["dew_point_2m"]),
+        "apparent_temperature": _safe_float(latest_row["apparent_temperature"]),
+        "precipitation": _safe_float(latest_row["precipitation"]),
+        "rain": _safe_float(latest_row["rain"]),
+        "pressure_msl": _safe_float(latest_row["pressure_msl"]),
+        "cloud_cover": _safe_float(latest_row["cloud_cover"]),
+        "wind_speed_10m": _safe_float(latest_row["wind_speed_10m"]),
+        "wind_direction_10m": _safe_float(latest_row["wind_direction_10m"]),
+        "wind_gusts_10m": _safe_float(latest_row["wind_gusts_10m"]),
+        "weather_code": int(_safe_float(latest_row["weather_code"])),
+    }
+
+    timestamp = latest_row["time"]
 
 
     return {
