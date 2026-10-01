@@ -1757,7 +1757,71 @@ export default function App() {
 
   const loadCities = async () => {
 
-    return;
+    const city = "Bengaluru";
+    const coords = CITY_COORDS[city];
+
+    if (!coords) return;
+
+    try {
+
+      const [latitude, longitude] = coords;
+
+      const params = new URLSearchParams({
+        latitude,
+        longitude,
+        current: [
+          "temperature_2m",
+          "relative_humidity_2m",
+          "dew_point_2m",
+          "apparent_temperature",
+          "precipitation",
+          "rain",
+          "pressure_msl",
+          "cloud_cover",
+          "wind_speed_10m",
+          "wind_direction_10m",
+          "wind_gusts_10m",
+          "weather_code",
+        ].join(","),
+        timezone: "auto",
+        temperature_unit: "celsius",
+        wind_speed_unit: "kmh",
+        precipitation_unit: "mm",
+      });
+
+      const response = await fetch(
+        `https://api.open-meteo.com/v1/forecast?${params.toString()}`
+      );
+
+      if (!response.ok) return;
+
+      const data = await response.json();
+      const current = data.current;
+
+      if (!current) return;
+
+      setCities((previous) => ({
+        ...previous,
+        [city]: {
+          city,
+          temperature: current.temperature_2m,
+          humidity: current.relative_humidity_2m,
+          wind_speed: current.wind_speed_10m,
+          rain: current.rain,
+          precipitation: current.precipitation,
+          pressure: current.pressure_msl,
+          weather_code: current.weather_code,
+          cloud_cover: current.cloud_cover,
+          dew_point: current.dew_point_2m,
+          apparent_temperature: current.apparent_temperature,
+        },
+      }));
+
+    } catch (error) {
+
+      console.error("Initial weather error:", error);
+
+    }
 
   };
 
