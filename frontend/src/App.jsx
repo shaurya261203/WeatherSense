@@ -1899,50 +1899,78 @@ export default function App() {
 
   const loadForecast = async (city) => {
 
+    const coords = CITY_COORDS[city];
+
+    if (!coords) return;
+
     try {
 
+      const [latitude, longitude] = coords;
+
+      const params = new URLSearchParams({
+
+        latitude,
+        longitude,
+
+        daily: [
+          "weather_code",
+          "temperature_2m_max",
+          "temperature_2m_min",
+          "apparent_temperature_max",
+          "apparent_temperature_min",
+          "precipitation_sum",
+          "rain_sum",
+          "precipitation_probability_max",
+          "wind_speed_10m_max",
+          "wind_gusts_10m_max",
+          "relative_humidity_2m_max",
+          "relative_humidity_2m_min",
+        ].join(","),
+
+        forecast_days: "16",
+        timezone: "auto",
+        temperature_unit: "celsius",
+        wind_speed_unit: "kmh",
+        precipitation_unit: "mm",
+
+      });
+
       const response = await fetch(
-
-        `${API}/forecast/${encodeURIComponent(city)}`
-
+        `https://api.open-meteo.com/v1/forecast?${params.toString()}`
       );
 
-
-
       if (!response.ok) {
-
-        throw new Error(
-
-          "Forecast failed"
-
-        );
-
+        throw new Error("Forecast failed");
       }
 
-
-
       const data = await response.json();
-
-
+      const daily = data.daily || {};
+      const dates = daily.time || [];
 
       setForecast(
-
-        data.forecast || []
-
+        dates.map((date, index) => ({
+          date,
+          weather_code: daily.weather_code?.[index] ?? 0,
+          temperature_max: daily.temperature_2m_max?.[index] ?? 0,
+          temperature_min: daily.temperature_2m_min?.[index] ?? 0,
+          feels_like_max: daily.apparent_temperature_max?.[index] ?? 0,
+          feels_like_min: daily.apparent_temperature_min?.[index] ?? 0,
+          precipitation: daily.precipitation_sum?.[index] ?? 0,
+          rain: daily.rain_sum?.[index] ?? 0,
+          rain_probability:
+            daily.precipitation_probability_max?.[index] ?? 0,
+          wind: daily.wind_speed_10m_max?.[index] ?? 0,
+          wind_gusts: daily.wind_gusts_10m_max?.[index] ?? 0,
+          humidity_max:
+            daily.relative_humidity_2m_max?.[index] ?? 0,
+          humidity_min:
+            daily.relative_humidity_2m_min?.[index] ?? 0,
+        }))
       );
 
     } catch (error) {
 
-      console.error(
-
-        "Forecast error:",
-
-        error
-
-      );
-
-
-
+      console.error("Forecast error:", error);
       setForecast([]);
 
     }
