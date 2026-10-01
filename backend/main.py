@@ -503,12 +503,88 @@ def predict_weather(city: str):
             )
         )
 
-        current = live_data[
-            "current"
-        ]
+        # Fetch current conditions separately so a historical
+        # Open-Meteo rate limit can never make the UI show
+        # synthetic fallback weather.
+        latitude, longitude = CITY_COORDS[matched_city]
+
+        current_params = {
+            "latitude": latitude,
+            "longitude": longitude,
+            "current": ",".join([
+                "temperature_2m",
+                "relative_humidity_2m",
+                "dew_point_2m",
+                "apparent_temperature",
+                "precipitation",
+                "rain",
+                "pressure_msl",
+                "cloud_cover",
+                "wind_speed_10m",
+                "wind_direction_10m",
+                "wind_gusts_10m",
+                "weather_code",
+            ]),
+            "timezone": "auto",
+            "temperature_unit": "celsius",
+            "wind_speed_unit": "kmh",
+            "precipitation_unit": "mm",
+        }
+
+        current_response = requests.get(
+            "https://api.open-meteo.com/v1/forecast",
+            params=current_params,
+            timeout=15,
+        )
+        current_response.raise_for_status()
+
+        current_data = current_response.json().get(
+            "current",
+            {}
+        )
+
+        if not current_data:
+            raise ValueError(
+                "Open-Meteo returned no current weather data."
+            )
+
+        current = {
+            "temperature_2m": current_data.get("temperature_2m"),
+            "relative_humidity_2m": current_data.get("relative_humidity_2m"),
+            "dew_point_2m": current_data.get("dew_point_2m"),
+            "apparent_temperature": current_data.get("apparent_temperature"),
+            "precipitation": current_data.get("precipitation"),
+            "rain": current_data.get("rain"),
+            "pressure_msl": current_data.get("pressure_msl"),
+            "cloud_cover": current_data.get("cloud_cover"),
+            "wind_speed_10m": current_data.get("wind_speed_10m"),
+            "wind_direction_10m": current_data.get("wind_direction_10m"),
+            "wind_gusts_10m": current_data.get("wind_gusts_10m"),
+            "weather_code": current_data.get("weather_code"),
+        }
+
+        # Keep the ML feature vector aligned with the actual
+        # current conditions while retaining historical lag features.
+        features = live_data["features"].copy()
+        for key in [
+            "temperature_2m",
+            "relative_humidity_2m",
+            "dew_point_2m",
+            "apparent_temperature",
+            "precipitation",
+            "rain",
+            "pressure_msl",
+            "cloud_cover",
+            "wind_speed_10m",
+            "wind_direction_10m",
+            "wind_gusts_10m",
+            "weather_code",
+        ]:
+            if current[key] is not None:
+                features[key] = float(current[key])
 
         X = pd.DataFrame(
-            [live_data["features"]],
+            [features],
             columns=FEATURE_COLUMNS,
         )
 
@@ -572,7 +648,8 @@ def predict_weather(city: str):
                 matched_city,
 
             "timestamp":
-                live_data["timestamp"],
+                current_data.get("time")
+                or live_data["timestamp"],
 
             "current": {
 
