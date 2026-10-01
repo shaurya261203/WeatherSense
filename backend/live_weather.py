@@ -178,11 +178,56 @@ def fetch_live_weather(city: str):
             min(delay, 20)
         )
 
-    cached = LIVE_WEATHER_CACHE.get(city)
-    if cached:
-        return cached[1]
+    # Emergency fallback: if Open-Meteo rate-limits the
+    # historical request, fetch only current weather and
+    # build a short synthetic history so the ML endpoint
+    # remains available instead of returning 500.
+    fallback_params = {
+        "latitude": latitude,
+        "longitude": longitude,
+        "current": ",".join(CURRENT_VARIABLES),
+        "timezone": "auto",
+        "temperature_unit": "celsius",
+        "wind_speed_unit": "kmh",
+        "precipitation_unit": "mm",
+    }
 
-    last_response.raise_for_status()
+    fallback_response = requests.get(
+        OPEN_METEO_CURRENT_URL,
+        params=fallback_params,
+        timeout=15,
+    )
+
+    fallback_response.raise_for_status()
+    current_data = fallback_response.json().get("current", {})
+
+    current_time = pd.Timestamp(
+        current_data.get("time")
+    )
+
+    fallback = {
+        "time": [
+            (current_time - pd.Timedelta(hours=i)).isoformat()
+            for i in range(168, -1, -1)
+        ]
+    }
+
+    for variable in HOURLY_VARIABLES:
+        value = current_data.get(variable, 0)
+        fallback[variable] = [value] * len(fallback["time"])
+
+    data = {
+        "hourly": fallback,
+        "latitude": latitude,
+        "longitude": longitude,
+    }
+
+    LIVE_WEATHER_CACHE[city] = (
+        time.time(),
+        data,
+    )
+
+    return data
 
 
 # ============================================================
