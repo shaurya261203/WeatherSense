@@ -1779,46 +1779,50 @@ export default function App() {
 
       const [latitude, longitude] = CITY_COORDS[city] || [];
 
-      let liveCurrent = null;
+      // Fetch current weather separately. It must never block the ML request.
+      const currentPromise =
+        latitude !== undefined && longitude !== undefined
+          ? (async () => {
+              try {
+                const currentParams = new URLSearchParams({
+                  latitude,
+                  longitude,
+                  current: [
+                    "temperature_2m",
+                    "relative_humidity_2m",
+                    "dew_point_2m",
+                    "apparent_temperature",
+                    "precipitation",
+                    "rain",
+                    "pressure_msl",
+                    "cloud_cover",
+                    "wind_speed_10m",
+                    "wind_direction_10m",
+                    "wind_gusts_10m",
+                    "weather_code",
+                  ].join(","),
+                  timezone: "auto",
+                  temperature_unit: "celsius",
+                  wind_speed_unit: "kmh",
+                  precipitation_unit: "mm",
+                });
 
-      if (latitude !== undefined && longitude !== undefined) {
-        try {
-          const currentParams = new URLSearchParams({
-            latitude,
-            longitude,
-            current: [
-              "temperature_2m",
-              "relative_humidity_2m",
-              "dew_point_2m",
-              "apparent_temperature",
-              "precipitation",
-              "rain",
-              "pressure_msl",
-              "cloud_cover",
-              "wind_speed_10m",
-              "wind_direction_10m",
-              "wind_gusts_10m",
-              "weather_code",
-            ].join(","),
-            timezone: "auto",
-            temperature_unit: "celsius",
-            wind_speed_unit: "kmh",
-            precipitation_unit: "mm",
-          });
+                const response = await fetch(
+                  `https://api.open-meteo.com/v1/forecast?${currentParams.toString()}`
+                );
 
-          const currentResponse = await fetch(
-            `https://api.open-meteo.com/v1/forecast?${currentParams.toString()}`
-          );
+                if (!response.ok) return null;
 
-          if (currentResponse.ok) {
-            const currentData = await currentResponse.json();
-            liveCurrent = currentData.current || null;
-          }
-        } catch (currentError) {
-          console.error("Live current weather error:", currentError);
-        }
-      }
+                const data = await response.json();
+                return data.current || null;
+              } catch (error) {
+                console.error("Live current weather error:", error);
+                return null;
+              }
+            })()
+          : Promise.resolve(null);
 
+      // ML prediction is independent and loads immediately.
       const response = await fetch(
         `${API}/predict/${encodeURIComponent(city)}`
       );
@@ -1831,32 +1835,60 @@ export default function App() {
 
       setPrediction(normalizePrediction(data));
 
-      const current = liveCurrent || data?.current;
+      const backendCurrent = data?.current;
 
-      if (current) {
+      if (backendCurrent) {
         setCities((previous) => ({
           ...previous,
           [city]: {
             city,
             temperature:
-              current.temperature_2m ?? current.temperature,
+              backendCurrent.temperature_2m ??
+              backendCurrent.temperature,
             humidity:
-              current.relative_humidity_2m ?? current.humidity,
+              backendCurrent.relative_humidity_2m ??
+              backendCurrent.humidity,
             wind_speed:
-              current.wind_speed_10m ?? current.wind_speed,
-            rain: current.rain,
-            precipitation: current.precipitation,
+              backendCurrent.wind_speed_10m ??
+              backendCurrent.wind_speed,
+            rain: backendCurrent.rain,
+            precipitation: backendCurrent.precipitation,
             pressure:
-              current.pressure_msl ?? current.pressure,
-            weather_code: current.weather_code,
-            cloud_cover: current.cloud_cover,
+              backendCurrent.pressure_msl ??
+              backendCurrent.pressure,
+            weather_code: backendCurrent.weather_code,
+            cloud_cover: backendCurrent.cloud_cover,
             dew_point:
-              current.dew_point_2m ?? current.dew_point,
+              backendCurrent.dew_point_2m ??
+              backendCurrent.dew_point,
             apparent_temperature:
-              current.apparent_temperature,
+              backendCurrent.apparent_temperature,
           },
         }));
       }
+
+      // Replace the backend current values with the real browser-fetched
+      // current weather when that request succeeds.
+      currentPromise.then((current) => {
+        if (!current) return;
+
+        setCities((previous) => ({
+          ...previous,
+          [city]: {
+            city,
+            temperature: current.temperature_2m,
+            humidity: current.relative_humidity_2m,
+            wind_speed: current.wind_speed_10m,
+            rain: current.rain,
+            precipitation: current.precipitation,
+            pressure: current.pressure_msl,
+            weather_code: current.weather_code,
+            cloud_cover: current.cloud_cover,
+            dew_point: current.dew_point_2m,
+            apparent_temperature: current.apparent_temperature,
+          },
+        }));
+      });
 
     } catch (error) {
 
