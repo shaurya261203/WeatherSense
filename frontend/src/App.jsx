@@ -1777,105 +1777,93 @@ export default function App() {
 
       setLoadingPrediction(true);
 
+      const [latitude, longitude] = CITY_COORDS[city] || [];
 
+      let liveCurrent = null;
 
-      const response = await fetch(
+      if (latitude !== undefined && longitude !== undefined) {
+        try {
+          const currentParams = new URLSearchParams({
+            latitude,
+            longitude,
+            current: [
+              "temperature_2m",
+              "relative_humidity_2m",
+              "dew_point_2m",
+              "apparent_temperature",
+              "precipitation",
+              "rain",
+              "pressure_msl",
+              "cloud_cover",
+              "wind_speed_10m",
+              "wind_direction_10m",
+              "wind_gusts_10m",
+              "weather_code",
+            ].join(","),
+            timezone: "auto",
+            temperature_unit: "celsius",
+            wind_speed_unit: "kmh",
+            precipitation_unit: "mm",
+          });
 
-        `${API}/predict/${encodeURIComponent(city)}`
+          const currentResponse = await fetch(
+            `https://api.open-meteo.com/v1/forecast?${currentParams.toString()}`
+          );
 
-      );
-
-
-
-      if (!response.ok) {
-
-        throw new Error(
-
-          "Prediction failed"
-
-        );
-
+          if (currentResponse.ok) {
+            const currentData = await currentResponse.json();
+            liveCurrent = currentData.current || null;
+          }
+        } catch (currentError) {
+          console.error("Live current weather error:", currentError);
+        }
       }
 
+      const response = await fetch(
+        `${API}/predict/${encodeURIComponent(city)}`
+      );
 
+      if (!response.ok) {
+        throw new Error("Prediction failed");
+      }
 
       const data = await response.json();
 
+      setPrediction(normalizePrediction(data));
 
-
-      /*
-
-       * IMPORTANT:
-
-       * Normalize backend response so the UI does not
-
-       * accidentally display 0.0 when the backend uses
-
-       * a different field name.
-
-       */
-
-      setPrediction(
-
-        normalizePrediction(data)
-
-      );
-
-
-
-      const current = data?.current;
-
-
+      const current = liveCurrent || data?.current;
 
       if (current) {
-
         setCities((previous) => ({
-
           ...previous,
-
           [city]: {
-
             city,
-
-            temperature: current.temperature,
-
-            humidity: current.humidity,
-
-            wind_speed: current.wind_speed,
-
+            temperature:
+              current.temperature_2m ?? current.temperature,
+            humidity:
+              current.relative_humidity_2m ?? current.humidity,
+            wind_speed:
+              current.wind_speed_10m ?? current.wind_speed,
             rain: current.rain,
-
             precipitation: current.precipitation,
-
-            pressure: current.pressure,
-
+            pressure:
+              current.pressure_msl ?? current.pressure,
             weather_code: current.weather_code,
-
             cloud_cover: current.cloud_cover,
-
-            dew_point: current.dew_point,
-
+            dew_point:
+              current.dew_point_2m ?? current.dew_point,
             apparent_temperature:
-
               current.apparent_temperature,
-
           },
-
         }));
-
       }
 
     } catch (error) {
 
       console.error(
-
         "Prediction error:",
-
         error
-
       );
-
-
 
       setPrediction(null);
 
