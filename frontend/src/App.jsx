@@ -1757,69 +1757,7 @@ export default function App() {
 
   const loadCities = async () => {
 
-    try {
-
-      const response = await fetch(
-
-        `${API}/cities/weather`
-
-      );
-
-
-
-      if (!response.ok) {
-
-        throw new Error(
-
-          "Failed to load city weather"
-
-        );
-
-      }
-
-
-
-      const data = await response.json();
-
-
-
-      const map = {};
-
-
-
-      if (Array.isArray(data)) {
-
-        data.forEach((item) => {
-
-          map[item.city] = item;
-
-        });
-
-      } else if (data?.cities) {
-
-        data.cities.forEach((item) => {
-
-          map[item.city] = item;
-
-        });
-
-      }
-
-
-
-      setCities(map);
-
-    } catch (error) {
-
-      console.error(
-
-        "City weather error:",
-
-        error
-
-      );
-
-    }
+    return;
 
   };
 
@@ -1882,6 +1820,50 @@ export default function App() {
         normalizePrediction(data)
 
       );
+
+
+
+      const current = data?.current;
+
+
+
+      if (current) {
+
+        setCities((previous) => ({
+
+          ...previous,
+
+          [city]: {
+
+            city,
+
+            temperature: current.temperature,
+
+            humidity: current.humidity,
+
+            wind_speed: current.wind_speed,
+
+            rain: current.rain,
+
+            precipitation: current.precipitation,
+
+            pressure: current.pressure,
+
+            weather_code: current.weather_code,
+
+            cloud_cover: current.cloud_cover,
+
+            dew_point: current.dew_point,
+
+            apparent_temperature:
+
+              current.apparent_temperature,
+
+          },
+
+        }));
+
+      }
 
     } catch (error) {
 
@@ -2338,22 +2320,6 @@ export default function App() {
   useEffect(() => {
 
     loadCities();
-
-
-
-    const interval = setInterval(
-
-      loadCities,
-
-      5 * 60 * 1000
-
-    );
-
-
-
-    return () =>
-
-      clearInterval(interval);
 
   }, []);
 
