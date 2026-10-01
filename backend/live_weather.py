@@ -176,41 +176,87 @@ def fetch_live_weather(city: str):
     except requests.RequestException:
         pass
 
-    # Fallback is for ML history only, never current UI weather.
-    fallback_values = {
-        "temperature_2m": 22.8,
-        "relative_humidity_2m": 89.0,
-        "dew_point_2m": 20.8,
-        "apparent_temperature": 23.5,
-        "precipitation": 0.0,
-        "rain": 0.0,
-        "pressure_msl": 1015.1,
-        "cloud_cover": 70.0,
-        "wind_speed_10m": 7.7,
-        "wind_direction_10m": 180.0,
-        "wind_gusts_10m": 12.0,
-        "weather_code": 2,
-    }
+    # If the 168-hour request is rate-limited, fetch the smaller
+    # current-weather payload and build a city-specific ML context.
+    # This avoids feeding the same hard-coded weather history to every city.
+    try:
+        current_data = fetch_current_weather(city)
+        current = current_data["current"]
 
-    current_time = pd.Timestamp.now().floor("h")
-    times = [
-        current_time - pd.Timedelta(hours=i)
-        for i in range(168, -1, -1)
-    ]
+        current_time = pd.to_datetime(
+            current.get("time")
+        ).floor("h")
 
-    hourly = {"time": [t.isoformat() for t in times]}
-    for variable in HOURLY_VARIABLES:
-        hourly[variable] = [
-            fallback_values.get(variable, 0.0)
-        ] * len(times)
+        times = [
+            current_time - pd.Timedelta(hours=i)
+            for i in range(168, -1, -1)
+        ]
 
-    data = {
-        "hourly": hourly,
-        "latitude": latitude,
-        "longitude": longitude,
-    }
-    LIVE_WEATHER_CACHE[city] = (time.time(), data)
-    return data
+        current_values = {
+            "temperature_2m": _safe_float(current.get("temperature_2m")),
+            "relative_humidity_2m": _safe_float(current.get("relative_humidity_2m")),
+            "dew_point_2m": _safe_float(current.get("dew_point_2m")),
+            "apparent_temperature": _safe_float(current.get("apparent_temperature")),
+            "precipitation": _safe_float(current.get("precipitation")),
+            "rain": _safe_float(current.get("rain")),
+            "pressure_msl": _safe_float(current.get("pressure_msl")),
+            "cloud_cover": _safe_float(current.get("cloud_cover")),
+            "wind_speed_10m": _safe_float(current.get("wind_speed_10m")),
+            "wind_direction_10m": _safe_float(current.get("wind_direction_10m")),
+            "wind_gusts_10m": _safe_float(current.get("wind_gusts_10m")),
+            "weather_code": _safe_float(current.get("weather_code")),
+        }
+
+        hourly = {"time": [t.isoformat() for t in times]}
+        for variable in HOURLY_VARIABLES:
+            hourly[variable] = [
+                current_values.get(variable, 0.0)
+            ] * len(times)
+
+        data = {
+            "hourly": hourly,
+            "latitude": latitude,
+            "longitude": longitude,
+        }
+        LIVE_WEATHER_CACHE[city] = (time.time(), data)
+        return data
+    except (requests.RequestException, KeyError, TypeError, ValueError):
+        # Last-resort synthetic fallback only if even the current
+        # weather request is unavailable.
+        fallback_values = {
+            "temperature_2m": 22.8,
+            "relative_humidity_2m": 89.0,
+            "dew_point_2m": 20.8,
+            "apparent_temperature": 23.5,
+            "precipitation": 0.0,
+            "rain": 0.0,
+            "pressure_msl": 1015.1,
+            "cloud_cover": 70.0,
+            "wind_speed_10m": 7.7,
+            "wind_direction_10m": 180.0,
+            "wind_gusts_10m": 12.0,
+            "weather_code": 2,
+        }
+
+        current_time = pd.Timestamp.now().floor("h")
+        times = [
+            current_time - pd.Timedelta(hours=i)
+            for i in range(168, -1, -1)
+        ]
+
+        hourly = {"time": [t.isoformat() for t in times]}
+        for variable in HOURLY_VARIABLES:
+            hourly[variable] = [
+                fallback_values.get(variable, 0.0)
+            ] * len(times)
+
+        data = {
+            "hourly": hourly,
+            "latitude": latitude,
+            "longitude": longitude,
+        }
+        LIVE_WEATHER_CACHE[city] = (time.time(), data)
+        return data
 
 
 # ============================================================
